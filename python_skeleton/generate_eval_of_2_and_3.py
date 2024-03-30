@@ -1,7 +1,7 @@
 """
 Simple example pokerbot, written in Python.
 """
-
+import numpy as np
 import itertools
 import pickle
 from typing import Optional
@@ -21,7 +21,7 @@ def find_combinations(lst, k):
 def normalize_values(data_dict):
     # Define the new minimum and maximum values
     new_min = 0
-    new_max = 200
+    new_max = 400
     old_min = min(data_dict.values())
     old_max = max(data_dict.values())
     scaling_factor = (new_max - new_min) / (old_max - old_min)

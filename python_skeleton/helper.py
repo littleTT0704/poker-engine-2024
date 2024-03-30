@@ -33,13 +33,14 @@ def compute_all_in_payoff(
     opp_equity_keys = [
         make_key(opp_cards, board_cards) for opp_cards in possible_opp_card
     ]
+    
     my_equity_key = make_key(my_cards, board_cards)
     my_equity = probs[my_equity_key]
     shares = [
         my_equity / (probs[opp_equity_key] + my_equity)
         if (probs[opp_equity_key] + my_equity) > 1e-8
         else 0.5
-        for opp_equity_key in opp_equity_keys
+        for opp_equity_key in opp_equity_keys if probs[opp_equity_key] > 0.2
     ]
     return sum(shares) / len(shares)
 

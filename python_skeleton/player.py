@@ -1,7 +1,7 @@
 """
 Simple example pokerbot, written in Python.
 """
-
+import numpy as np
 import pickle
 import random
 from typing import Optional
@@ -47,6 +47,9 @@ class Player(Bot):
         self.pre_all_in_eval = pickle.load(
             open("python_skeleton/skeleton/all_in_evals.pkl", "rb")
         )
+        self.pre_computed_probs = pickle.load(open("python_skeleton/skeleton/pre_computed_probs.pkl", "rb")) 
+        self.avg_eval = np.mean(np.array(list(self.evalof4.values())))
+        pass
 
     def handle_new_round(
         self, game_state: GameState, round_state: RoundState, active: int
@@ -143,6 +146,8 @@ class Player(Bot):
         self.log.append("My contribution: " + str(my_contribution))
         self.log.append("My bankroll: " + str(observation["my_bankroll"]))
 
+        prob = self.pre_computed_probs['_'.join(sorted(observation["my_cards"])) + '_' + '_'.join(sorted(observation["board_cards"]))]
+
         # Handles all-in situations
         if observation["opp_stack"] == 0:
             # opponent has all-in
@@ -188,23 +193,34 @@ class Player(Bot):
                 )
                 equity = self.evalof4[key]
 
+            self.log.append("Eval: " + str(equity))
+
+            equity = equity*np.sqrt(equity/self.avg_eval)*prob
+
+            self.log.append("After prob: " + str(equity))
+
             if equity > my_contribution:
                 expected_diff = equity - my_contribution
                 bid_diff = opp_contribution - my_contribution
                 self.log.append(f"Expected diff: {expected_diff:.2f}")
                 self.log.append(f"  Actual diff: {bid_diff}")
                 if (
-                    bid_diff > 0.9 * expected_diff
+                    bid_diff+observation["min_raise"] > expected_diff
                     and CallAction in observation["legal_actions"]
                 ):
                     action = CallAction()
                 if (
-                    bid_diff <= 0.9 * expected_diff
+                    bid_diff+observation["min_raise"] <= expected_diff
                     and RaiseAction in observation["legal_actions"]
                 ):
-                    raise_amount = min(int(expected_diff), observation["max_raise"])
+                    raise_amount = min(int(equity), observation["max_raise"])
                     raise_amount = max(raise_amount, observation["min_raise"])
                     action = RaiseAction(raise_amount)
+                if (
+                    bid_diff >= 1 * expected_diff
+                    and FoldAction in observation["legal_actions"]
+                ):
+                    action = FoldAction()
             elif CheckAction in observation["legal_actions"]:
                 action = CheckAction()
             else:
