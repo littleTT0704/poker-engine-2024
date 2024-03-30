@@ -39,7 +39,7 @@ class Player(Bot):
         Returns:
         Nothing.
         """
-        self.version = "0133"
+        self.version = "1200"
 
         self.evalof2 = pickle.load(open("python_skeleton/evalof2.pkl", "rb"))
         self.evalof3 = pickle.load(open("python_skeleton/evalof3.pkl", "rb"))
@@ -69,7 +69,7 @@ class Player(Bot):
         # big_blind = bool(active) # True if you are the big blind
         self.log = [self.version]
         self.log.append("================================")
-        self.log.append("new round")
+        self.log.append(f"Round #{game_state.round_num}")
 
     def handle_round_over(
         self,
@@ -95,7 +95,11 @@ class Player(Bot):
         # my_cards = previous_state.hands[0] # your cards
         # opp_cards = previous_state.hands[1] # opponent's cards or [] if not revealed
         self.log.append("game over")
-        self.log.append("================================\n")
+        self.log.append(f"My delta: {terminal_state.deltas[active]}")
+        previous_state = terminal_state.previous_state
+        self.log.append(f"Opponent cards: {previous_state.hands[1]}")
+        self.log.append(f"\n")
+        # self.log.append("================================\n")
 
         return self.log
 
@@ -187,6 +191,8 @@ class Player(Bot):
             if equity > my_contribution:
                 expected_diff = equity - my_contribution
                 bid_diff = opp_contribution - my_contribution
+                self.log.append(f"Expected diff: {expected_diff:.2f}")
+                self.log.append(f"  Actual diff: {bid_diff}")
                 if (
                     bid_diff > 0.9 * expected_diff
                     and CallAction in observation["legal_actions"]
@@ -213,6 +219,7 @@ class Player(Bot):
         cur_return = observation["my_stack"]
         my_cards_key = make_key(observation["my_cards"], observation["board_cards"])
         all_return = 2 * STARTING_STACK * self.pre_all_in_eval[my_cards_key]
+        self.log.append(f"All-in return: {all_return}")
         if cur_return < all_return:
             return CallAction()
         else:
