@@ -101,6 +101,9 @@ class Player(Bot):
         opp_contribution = STARTING_STACK - observation["opp_stack"] # the number of chips your opponent has contributed to the pot
         continue_cost = observation["opp_pip"] - observation["my_pip"] # the number of chips needed to stay in the pot
 
+        equity = self.pre_computed_probs['_'.join(sorted(observation["my_cards"])) + '_' + '_'.join(sorted(observation["board_cards"]))]
+        
+
         self.log.append("My cards: " + str(observation["my_cards"]))
         self.log.append("Board cards: " + str(observation["board_cards"]))
         self.log.append("My stack: " + str(observation["my_stack"]))
