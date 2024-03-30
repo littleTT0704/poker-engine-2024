@@ -72,18 +72,22 @@ class MyPokerEnv(PokerEnv):
 
         return res
 
-    def step(self, action):
+    def _process_action(self, action):
         curr_round_state = self.curr_round_state
         opp_pip = curr_round_state.pips[1 - curr_round_state.button % 2]
         min_raise = curr_round_state.raise_bounds()[0]
 
         raise_amount = int(action[0] * STARTING_STACK)
         if raise_amount < opp_pip:
-            action = CheckAction()
+            action = (2, 0)  # CheckAction()
         elif raise_amount < min_raise:
-            action = CallAction()
+            action = (1, 0)  # CallAction()
         else:
-            action = RaiseAction(raise_amount)
+            action = (3, raise_amount)  # RaiseAction(raise_amount)
+        return action
+
+    def step(self, action):
+        action = self._process_action(action)
 
         obs, reward, done, trunc, info = super().step(action)
         return self._process_observation(obs), reward, done, trunc, info
@@ -91,3 +95,15 @@ class MyPokerEnv(PokerEnv):
     def reset(self, **kwargs):
         obs, info = super().reset(**kwargs)
         return self._process_observation(obs), info
+
+    def _step_with_opp(self, action):
+        assert self.opp_bot is not None
+        assert self.curr_round_state.button % 2 == 0
+        (obs1, obs2), (reward1, _), done, trunc, info = self._step_without_opp(action)
+        while obs2["is_my_turn"]:
+            obs2 = self._process_observation(obs2)
+            action2 = self._process_action(self.opp_bot.predict(obs2)[0])
+            (obs1, obs2), (reward1, _), done, trunc, info = self._step_without_opp(
+                action2
+            )
+        return obs1, reward1, done, trunc, info
