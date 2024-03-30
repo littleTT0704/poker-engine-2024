@@ -4,7 +4,25 @@ import pickle
 import numpy as np
 from typing import Optional
 
-from skeleton.actions import Action, CallAction, CheckAction, FoldAction, RaiseAction
+try:
+    from skeleton.actions import (
+        Action,
+        CallAction,
+        CheckAction,
+        FoldAction,
+        RaiseAction,
+    )
+except ImportError:
+    import sys
+
+    sys.path.append("./python_skeleton")
+    from skeleton.actions import (
+        Action,
+        CallAction,
+        CheckAction,
+        FoldAction,
+        RaiseAction,
+    )
 from skeleton.states import GameState, TerminalState, RoundState
 from skeleton.states import NUM_ROUNDS, STARTING_STACK, BIG_BLIND, SMALL_BLIND
 from skeleton.bot import Bot
