@@ -41,7 +41,7 @@ class Player(Bot):
         Returns:
         Nothing.
         """
-        self.version = "1545"
+        self.version = "1608"
 
         self.evalof2 = pickle.load(open("python_skeleton/evalof2.pkl", "rb"))
         self.evalof3 = pickle.load(open("python_skeleton/evalof3.pkl", "rb"))
