@@ -7,12 +7,8 @@ from .actions import (
     FoldAction,
     RaiseAction,
 )
-
-
-def card_to_int(card: str):
-    rank, suit = card[0], card[1]
-    suit = {"s": 0, "h": 1, "d": 2}[suit]
-    return suit * 9 + int(rank)
+import pickle
+import numpy as np
 
 
 class MyPokerEnv(PokerEnv):
@@ -23,7 +19,6 @@ class MyPokerEnv(PokerEnv):
         cards_space = spaces.MultiDiscrete([3 * 9 + 1, 3 * 9 + 1])
         self.observation_space = spaces.Dict(
             {
-                "legal_actions": spaces.MultiBinary(4),
                 "street": spaces.Discrete(3),
                 "my_cards": cards_space,
                 "board_cards": cards_space,
@@ -33,16 +28,33 @@ class MyPokerEnv(PokerEnv):
                 "opp_stack": spaces.Box(low=0, high=1, shape=(1,)),
                 "min_raise": spaces.Box(low=0, high=1, shape=(1,)),
                 "max_raise": spaces.Box(low=0, high=1, shape=(1,)),
+                "equity": spaces.Box(low=0, high=1, shape=(1,)),
             }
+        )
+        self.pre_computed_probs = pickle.load(
+            open("python_skeleton/skeleton/pre_computed_probs.pkl", "rb")
         )
 
     def _process_observation(self, obs):
         res = dict()
-        res["legal_actions"] = obs["legal_actions"].astype(bool)
         res["street"] = obs["street"]
 
         def int_to_int(x):
             return x // 10 * 9 + x % 10
+
+        def int_to_card(x):
+            return f"{x % 10}{['s', 'h', 'd'][x // 10]}"
+
+        def ints_to_cards(l):
+            return "_".join(sorted([int_to_card(i) for i in l if i != 0]))
+
+        res["equity"] = np.array(
+            [
+                self.pre_computed_probs[
+                    f"{ints_to_cards(obs['my_cards'])}_{ints_to_cards(obs['board_cards'])}"
+                ]
+            ]
+        )
 
         res["my_cards"] = int_to_int(obs["my_cards"])
         res["board_cards"] = int_to_int(obs["board_cards"])
@@ -58,11 +70,13 @@ class MyPokerEnv(PokerEnv):
 
     def _process_action(self, action):
         curr_round_state = self.curr_round_state
-        opp_pip = curr_round_state.pips[1 - curr_round_state.button % 2]
+        opp_contribution = (
+            STARTING_STACK - curr_round_state.stacks[1 - curr_round_state.button % 2]
+        )
         min_raise = curr_round_state.raise_bounds()[0]
 
         raise_amount = int(action[0] * STARTING_STACK)
-        if raise_amount < opp_pip:
+        if raise_amount < opp_contribution:
             action = (2, 0)  # CheckAction()
         elif raise_amount < min_raise:
             action = (1, 0)  # CallAction()
