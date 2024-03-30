@@ -210,6 +210,11 @@ class Player(Bot):
                 ):
                     action = CallAction()
                 if (
+                    bid_diff+observation["min_raise"] > expected_diff
+                    and CheckAction in observation["legal_actions"]
+                ):
+                    action = CheckAction()
+                if (
                     bid_diff+observation["min_raise"] <= expected_diff
                     and RaiseAction in observation["legal_actions"]
                 ):
@@ -221,6 +226,11 @@ class Player(Bot):
                     and FoldAction in observation["legal_actions"]
                 ):
                     action = FoldAction()
+                if (
+                    bid_diff >= 1 * expected_diff
+                    and CheckAction in observation["legal_actions"]
+                ):
+                    action = CheckAction()
             elif CheckAction in observation["legal_actions"]:
                 action = CheckAction()
             else:
