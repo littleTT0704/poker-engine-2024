@@ -7,6 +7,7 @@ import random
 from typing import Optional
 
 from helper import make_key
+from player import Player as CalculatedPlayer
 from skeleton.actions import Action, CallAction, CheckAction, FoldAction, RaiseAction
 from skeleton.bot import Bot
 from skeleton.runner import parse_args, run_bot
@@ -36,11 +37,11 @@ class Player(Bot):
         Returns:
         Nothing.
         """
-        self.version = "0133"
+        self.version = "0205"
 
-        self.evalof2 = pickle.load(open("python_skeleton/evalof2.pkl", "rb"))
-        self.evalof3 = pickle.load(open("python_skeleton/evalof3.pkl", "rb"))
-        self.evalof4 = pickle.load(open("python_skeleton/evalof4.pkl", "rb"))
+        self.players = {
+            "calculated-0.1": CalculatedPlayer(),
+        }
         self.pre_all_in_eval = pickle.load(
             open("python_skeleton/skeleton/all_in_evals.pkl", "rb")
         )
@@ -67,6 +68,8 @@ class Player(Bot):
         self.log = [self.version]
         self.log.append("================================")
         self.log.append("new round")
+        for player in self.players.values():
+            player.handle_new_round(game_state, round_state, active)
 
     def handle_round_over(
         self,
@@ -93,6 +96,9 @@ class Player(Bot):
         # opp_cards = previous_state.hands[1] # opponent's cards or [] if not revealed
         self.log.append("game over")
         self.log.append("================================\n")
+
+        for player in self.players.values():
+            player.handle_round_over(game_state, terminal_state, active, is_match_over)
 
         return self.log
 
@@ -143,63 +149,11 @@ class Player(Bot):
 
         else:
 
-            if len(observation["board_cards"]) == 0:
-                temp_cards_list = observation["my_cards"]
-                temp_cards_list_s = sorted(
-                    temp_cards_list, key=lambda x: (int(x[0]), x[1])
-                )
-                key = temp_cards_list_s[0] + "_" + temp_cards_list_s[1]
-                equity = self.evalof2[key]
-
-            if len(observation["board_cards"]) == 1:
-                temp_cards_list = observation["my_cards"] + observation["board_cards"]
-                temp_cards_list_s = sorted(
-                    temp_cards_list, key=lambda x: (int(x[0]), x[1])
-                )
-                key = (
-                    temp_cards_list_s[0]
-                    + "_"
-                    + temp_cards_list_s[1]
-                    + "_"
-                    + temp_cards_list_s[2]
-                )
-                equity = self.evalof3[key]
-
-            if len(observation["board_cards"]) == 2:
-                temp_cards_list = observation["my_cards"] + observation["board_cards"]
-                temp_cards_list_s = sorted(
-                    temp_cards_list, key=lambda x: (int(x[0]), x[1])
-                )
-                key = (
-                    temp_cards_list_s[0]
-                    + "_"
-                    + temp_cards_list_s[1]
-                    + "_"
-                    + temp_cards_list_s[2]
-                    + "_"
-                    + temp_cards_list_s[3]
-                )
-                equity = self.evalof4[key]
-
-            if equity > my_contribution:
-                expected_diff = equity - my_contribution
-                bid_diff = opp_contribution - my_contribution
-                if (
-                    bid_diff > 0.9 * expected_diff
-                    and CallAction in observation["legal_actions"]
-                ):
-                    action = CallAction()
-                if (
-                    bid_diff <= 0.9 * expected_diff
-                    and RaiseAction in observation["legal_actions"]
-                ):
-                    raise_amount = min(int(expected_diff), observation["max_raise"])
-                    raise_amount = max(raise_amount, observation["min_raise"])
-                    action = RaiseAction(raise_amount)
-            elif CheckAction in observation["legal_actions"]:
-                action = CheckAction()
-            else:
-                action = FoldAction()
+            player_names = sorted(self.players.keys())
+            player_weights = [eval(name.split("-")[-1]) for name in player_names]
+            player_chosen = random.choices(player_names, player_weights)[0]
+            self.log.append("Player Chosen: " + player_chosen)
+            action = self.players[player_chosen].get_action(observation)
 
         self.log.append(str(action) + "\n")
 
