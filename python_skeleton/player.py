@@ -6,7 +6,6 @@ import pickle
 import random
 from typing import Optional
 
-from helper import make_key
 from skeleton.actions import Action, CallAction, CheckAction, FoldAction, RaiseAction
 from skeleton.bot import Bot
 from skeleton.runner import parse_args, run_bot
@@ -19,6 +18,10 @@ from skeleton.states import (
     RoundState,
     TerminalState,
 )
+
+
+def make_key(cards: list[str], board_cards: list[str]) -> str:
+    return "_".join(sorted(cards)) + "_" + "_".join(sorted(board_cards))
 
 
 class Player(Bot):
