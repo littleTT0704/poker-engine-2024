@@ -1,28 +1,12 @@
-"""
-CMU Poker Bot Competition Game Engine 2024
-"""
-
-import numpy as np
-import gymnasium as gym
 from gymnasium import spaces
-from collections import deque
+from .config import STARTING_STACK
+from .gym_env import PokerEnv
+from .roundstate import RoundState
 from .actions import (
-    Action,
-    CallAction,
     CheckAction,
     FoldAction,
     RaiseAction,
-    TerminalState,
 )
-from .config import (
-    BIG_BLIND,
-    NUM_ROUNDS,
-    SMALL_BLIND,
-    STARTING_STACK,
-)
-from .evaluate import ShortDeck
-from .roundstate import RoundState
-from .gym_env import PokerEnv
 
 
 def card_to_int(card: str):
@@ -107,3 +91,18 @@ class MyPokerEnv(PokerEnv):
                 action2
             )
         return obs1, reward1, done, trunc, info
+
+    def _validate_action(self, action, round_state, player_name: str):
+        legal_actions = (
+            round_state.legal_actions()
+            if isinstance(round_state, RoundState)
+            else {CheckAction}
+        )
+        if isinstance(action, RaiseAction):
+            amount = int(action.amount)
+            min_raise, max_raise = round_state.raise_bounds()
+            if RaiseAction in legal_actions and min_raise <= amount <= max_raise:
+                return action
+        elif type(action) in legal_actions:
+            return action
+        return CheckAction() if CheckAction in legal_actions else FoldAction()
