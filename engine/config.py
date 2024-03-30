@@ -1,20 +1,19 @@
 import csv
+import os
 from datetime import datetime
 from io import StringIO
-import os
 from typing import List, Union
 
 from google.auth import default
 from google.auth.exceptions import DefaultCredentialsError
 from google.cloud import storage
 from google.cloud.sql.connector import Connector
-import sqlalchemy
 
 # PARAMETERS TO CONTROL THE BEHAVIOR OF THE GAME ENGINE
 
 # Player names
-PLAYER_1_NAME = os.getenv("PLAYER_1_NAME", "all-in-bot")
-PLAYER_2_NAME = os.getenv("PLAYER_2_NAME", "prob-bot")
+PLAYER_1_NAME = os.getenv("PLAYER_1_NAME", "my-bot")
+PLAYER_2_NAME = os.getenv("PLAYER_2_NAME", "baseline-bot")
 
 # DNS names for player bots, retrieved from environment variables
 PLAYER_1_DNS = os.getenv("PLAYER_1_DNS", "localhost:50051")
@@ -106,7 +105,9 @@ def add_match_entry(player1_bankroll: int, player2_bankroll: int) -> None:
     db_name = os.getenv("DB_NAME")
 
     if not (instance_connection_name and db_user and db_pass and db_name):
-        print("No connection name or database credentials found, skipping updating table.")
+        print(
+            "No connection name or database credentials found, skipping updating table."
+        )
         return
 
     with Connector() as connector:
@@ -118,7 +119,7 @@ def add_match_entry(player1_bankroll: int, player2_bankroll: int) -> None:
                 user=db_user,
                 password=db_pass,
                 db=db_name,
-                ip_type="private"
+                ip_type="private",
             )
             return conn
 
@@ -130,11 +131,13 @@ def add_match_entry(player1_bankroll: int, player2_bankroll: int) -> None:
         try:
             with pool.connect() as db_conn:
                 # Check if player names exist in the 'TeamDao' table
-                query_teams = sqlalchemy.text("""
+                query_teams = sqlalchemy.text(
+                    """
                     SELECT githubUsername
                     FROM TeamDao
                     WHERE githubUsername IN (:player1, :player2)
-                """)
+                """
+                )
                 result = db_conn.execute(
                     query_teams,
                     {"player1": PLAYER_1_NAME, "player2": PLAYER_2_NAME},
@@ -148,10 +151,12 @@ def add_match_entry(player1_bankroll: int, player2_bankroll: int) -> None:
                     return
 
                 # Insert the match entry into the 'MatchDao' table
-                insert_match_query = sqlalchemy.text("""
+                insert_match_query = sqlalchemy.text(
+                    """
                     INSERT INTO MatchDao (matchId, timestamp)
                     VALUES (:match_id, :timestamp)
-                """)
+                """
+                )
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 db_conn.execute(
                     insert_match_query,
@@ -159,11 +164,13 @@ def add_match_entry(player1_bankroll: int, player2_bankroll: int) -> None:
                 )
 
                 # Insert the team match entries into the 'TeamMatchDao' table
-                insert_team_match_query = sqlalchemy.text("""
+                insert_team_match_query = sqlalchemy.text(
+                    """
                     INSERT INTO TeamMatchDao (matchId, teamId, bankroll)
                     VALUES (:match_id, :team1, :bankroll1),
                         (:match_id, :team2, :bankroll2)
-                """)
+                """
+                )
                 db_conn.execute(
                     insert_team_match_query,
                     {
