@@ -2,12 +2,15 @@
 Simple example pokerbot, written in Python.
 """
 
+import itertools
 import pickle
 import random
 from typing import Optional
 
+from helper import make_key
 from skeleton.actions import Action, CallAction, CheckAction, FoldAction, RaiseAction
 from skeleton.bot import Bot
+from skeleton.evaluate import evaluate
 from skeleton.runner import parse_args, run_bot
 from skeleton.states import (
     BIG_BLIND,
@@ -18,10 +21,6 @@ from skeleton.states import (
     RoundState,
     TerminalState,
 )
-
-
-def make_key(cards: list[str], board_cards: list[str]) -> str:
-    return "_".join(sorted(cards)) + "_" + "_".join(sorted(board_cards))
 
 
 class Player(Bot):
@@ -39,11 +38,10 @@ class Player(Bot):
         Returns:
         Nothing.
         """
-        self.version = "0133"
-
-        self.evalof2 = pickle.load(open("python_skeleton/evalof2.pkl", "rb"))
-        self.evalof3 = pickle.load(open("python_skeleton/evalof3.pkl", "rb"))
-        self.evalof4 = pickle.load(open("python_skeleton/evalof4.pkl", "rb"))
+        self.log = []
+        self.pre_computed_probs = pickle.load(
+            open("python_skeleton/skeleton/pre_computed_probs.pkl", "rb")
+        )
         self.pre_all_in_eval = pickle.load(
             open("python_skeleton/skeleton/all_in_evals.pkl", "rb")
         )
@@ -62,12 +60,17 @@ class Player(Bot):
         Returns:
             None
         """
-        # my_bankroll = game_state.bankroll # the total number of chips you've gained or lost from the beginning of the game to the start of this round
-        # game_clock = game_state.game_clock # the total number of seconds your bot has left to play this game
-        # round_num = game_state.round_num # the round number from 1 to NUM_ROUNDS
-        # my_cards = round_state.hands[0] # your cards
-        # big_blind = bool(active) # True if you are the big blind
-        self.log = [self.version]
+        self.my_bankroll = (
+            game_state.bankroll
+        )  # the total number of chips you've gained or lost from the beginning of the game to the start of this round
+        self.game_clock = (
+            game_state.game_clock
+        )  # the total number of seconds your bot has left to play this game
+        self.round_num = game_state.round_num  # the round number from 1 to NUM_ROUNDS
+        self.my_cards = round_state.hands[active]  # your cards
+        self.big_blind = bool(active)  # True if you are the big blind
+
+        self.log = []
         self.log.append("================================")
         self.log.append("new round")
 
@@ -89,11 +92,18 @@ class Player(Bot):
         Returns:
             Your logs.
         """
-        # my_delta = terminal_state.deltas[active] # your bankroll change from this round
-        # previous_state = terminal_state.previous_state # RoundState before payoffs
-        # street = previous_state.street # 0, 3, 4, or 5 representing when this round ended
-        # my_cards = previous_state.hands[0] # your cards
-        # opp_cards = previous_state.hands[1] # opponent's cards or [] if not revealed
+        self.my_delta = terminal_state.deltas[
+            active
+        ]  # your bankroll change from this round
+        self.previous_state = terminal_state.previous_state  # RoundState before payoffs
+        self.street = (
+            self.previous_state.street
+        )  # 0, 3, 4, or 5 representing when this round ended
+        self.my_cards = self.previous_state.hands[active]  # your cards
+        self.opp_cards = self.previous_state.hands[
+            1 - active
+        ]  # opponent's cards or [] if not revealed
+
         self.log.append("game over")
         self.log.append("================================\n")
 
@@ -123,96 +133,52 @@ class Player(Bot):
         Returns:
             Action: The action you want to take.
         """
-        my_contribution = (
+        self.my_contribution = (
             STARTING_STACK - observation["my_stack"]
         )  # the number of chips you have contributed to the pot
-        opp_contribution = (
+        self.opp_contribution = (
             STARTING_STACK - observation["opp_stack"]
         )  # the number of chips your opponent has contributed to the pot
-        continue_cost = (
+        self.pot_size = (
+            self.my_contribution + self.opp_contribution
+        )  # the number of chips in the pot
+        self.continue_cost = (
             observation["opp_pip"] - observation["my_pip"]
         )  # the number of chips needed to stay in the pot
 
         self.log.append("My cards: " + str(observation["my_cards"]))
         self.log.append("Board cards: " + str(observation["board_cards"]))
         self.log.append("My stack: " + str(observation["my_stack"]))
-        self.log.append("My contribution: " + str(my_contribution))
+        self.log.append("My contribution: " + str(self.my_contribution))
         self.log.append("My bankroll: " + str(observation["my_bankroll"]))
+
+        # Use pre-computed probability calculation
+        self.my_cards_key = make_key(
+            observation["my_cards"], observation["board_cards"]
+        )
+        equity = self.pre_computed_probs[self.my_cards_key]
+        pot_odds = self.continue_cost / (self.pot_size + self.continue_cost)
+
+        self.log.append(f"Equity: {equity}")
+        self.log.append(f"Pot odds: {pot_odds}")
 
         # Handles all-in situations
         if observation["opp_stack"] == 0:
             # opponent has all-in
-            action = self.get_action_all_in(observation)
+            return self.get_action_all_in(observation)
 
         else:
 
-            if len(observation["board_cards"]) == 0:
-                temp_cards_list = observation["my_cards"]
-                temp_cards_list_s = sorted(
-                    temp_cards_list, key=lambda x: (int(x[0]), x[1])
-                )
-                key = temp_cards_list_s[0] + "_" + temp_cards_list_s[1]
-                equity = self.evalof2[key]
-
-            if len(observation["board_cards"]) == 1:
-                temp_cards_list = observation["my_cards"] + observation["board_cards"]
-                temp_cards_list_s = sorted(
-                    temp_cards_list, key=lambda x: (int(x[0]), x[1])
-                )
-                key = (
-                    temp_cards_list_s[0]
-                    + "_"
-                    + temp_cards_list_s[1]
-                    + "_"
-                    + temp_cards_list_s[2]
-                )
-                equity = self.evalof3[key]
-
-            if len(observation["board_cards"]) == 2:
-                temp_cards_list = observation["my_cards"] + observation["board_cards"]
-                temp_cards_list_s = sorted(
-                    temp_cards_list, key=lambda x: (int(x[0]), x[1])
-                )
-                key = (
-                    temp_cards_list_s[0]
-                    + "_"
-                    + temp_cards_list_s[1]
-                    + "_"
-                    + temp_cards_list_s[2]
-                    + "_"
-                    + temp_cards_list_s[3]
-                )
-                equity = self.evalof4[key]
-
-            if equity > my_contribution:
-                expected_diff = equity - my_contribution
-                bid_diff = opp_contribution - my_contribution
-                if (
-                    bid_diff > 0.9 * expected_diff
-                    and CallAction in observation["legal_actions"]
-                ):
-                    action = CallAction()
-                if (
-                    bid_diff <= 0.9 * expected_diff
-                    and RaiseAction in observation["legal_actions"]
-                ):
-                    raise_amount = min(int(expected_diff), observation["max_raise"])
-                    raise_amount = max(raise_amount, observation["min_raise"])
-                    action = RaiseAction(raise_amount)
-            elif CheckAction in observation["legal_actions"]:
-                action = CheckAction()
-            else:
-                action = FoldAction()
-
-        self.log.append(str(action) + "\n")
-
-        return action
+            if RaiseAction in observation["legal_actions"] and random.random() < 0.99:
+                return RaiseAction(observation["max_raise"])
+            if CheckAction in observation["legal_actions"]:
+                return CheckAction()
+            return CallAction()
 
     def get_action_all_in(self, observation: dict) -> Action:
 
         cur_return = observation["my_stack"]
-        my_cards_key = make_key(observation["my_cards"], observation["board_cards"])
-        all_return = 2 * STARTING_STACK * self.pre_all_in_eval[my_cards_key]
+        all_return = 2 * STARTING_STACK * self.pre_all_in_eval[self.my_cards_key]
         if cur_return < all_return:
             return CallAction()
         else:
