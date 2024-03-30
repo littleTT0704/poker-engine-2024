@@ -1,6 +1,7 @@
 """
 Simple example pokerbot, written in Python.
 """
+
 import pickle
 import random
 from typing import Optional
@@ -40,7 +41,7 @@ class Player(Bot):
         Returns:
         Nothing.
         """
-        self.version = "1545"
+        self.version = "1608"
 
         self.evalof2 = pickle.load(open("python_skeleton/evalof2.pkl", "rb"))
         self.evalof3 = pickle.load(open("python_skeleton/evalof3.pkl", "rb"))
@@ -210,7 +211,7 @@ class Player(Bot):
 
             self.log.append("Eval: " + str(equity))
 
-            equity = equity * np.sqrt(equity / self.avg_eval) * prob
+            equity = equity * equity / self.avg_eval * (prob / 0.6) ** 2
 
             self.log.append("After prob: " + str(equity))
 
@@ -234,7 +235,7 @@ class Player(Bot):
                     and RaiseAction in observation["legal_actions"]
                 ):
                     raise_amount = min(
-                        int(my_contribution + expected_diff / 2),
+                        int(my_contribution + expected_diff / 3),
                         observation["max_raise"],
                     )
                     raise_amount = max(raise_amount, observation["min_raise"])
