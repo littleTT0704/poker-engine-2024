@@ -147,6 +147,7 @@ class Player(Bot):
             action = FoldAction()
 
         self.log.append(str(action) + "\n")
+        print(self.log)
 
         return action
 

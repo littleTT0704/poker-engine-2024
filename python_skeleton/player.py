@@ -19,6 +19,8 @@ from skeleton.states import (
     RoundState,
     TerminalState,
 )
+import math
+
 
 
 class Player(Bot):
@@ -44,6 +46,19 @@ class Player(Bot):
         self.pre_all_in_eval = pickle.load(
             open("python_skeleton/skeleton/all_in_evals.pkl", "rb")
         )
+        self.history_bank_roll = []
+        self.lookback = 5
+
+        self.risk_preference = 0.1 # use to adjust th tanh range 
+        # currently the tanh is -0.5 to 0.5 as we - 0.5 from the result.
+        # therefore, the range of risk taking will be 0.8 to 1.2, 
+        # where 0.8 means very cautious and 1.2 means very aggressive
+    
+    def tanh(self, x):
+        exp_x = math.exp(x)
+        exp_neg_x = math.exp(-x)
+        # Implement the formula for tanh
+        return (exp_x - exp_neg_x) / (exp_x + exp_neg_x)
 
     def handle_new_round(
         self, game_state: GameState, round_state: RoundState, active: int
@@ -95,6 +110,18 @@ class Player(Bot):
         self.log.append("================================\n")
 
         return self.log
+    
+    def numb_wins(self,numbers):
+        wins = 0
+        for i in range(1, len(numbers)):
+            difference = numbers[i] - numbers[i - 1]
+            if difference >= 0:
+                sign = 1
+            else:
+                sign = 0
+            wins += sign
+        
+        return wins
 
     def get_action(self, observation: dict) -> Action:
         """
@@ -129,6 +156,29 @@ class Player(Bot):
         continue_cost = (
             observation["opp_pip"] - observation["my_pip"]
         )  # the number of chips needed to stay in the pot
+
+        # Record the most recent 11 bankroll to get the win/loss of most recent 10 games
+        mang = 1
+        self.history_bank_roll.append(observation["my_bankroll"])
+        if len(self.history_bank_roll) >= self.lookback:
+            past_games = self.history_bank_roll[-self.lookback:]
+            most_recent_wins = self.numb_wins(past_games)
+            most_recent_winning_rate = most_recent_wins/(self.lookback-1)
+
+            deviated_winning_rate = most_recent_winning_rate - 0.5 # -0.5 to 0.5
+
+
+
+            mang += (self.tanh(deviated_winning_rate)) * self.risk_preference
+            # print(past_games)
+            # print("winning rate", most_recent_winning_rate)
+            # print("deviated_winning_rate", deviated_winning_rate)
+            # print("tanh result", self.tanh(deviated_winning_rate))
+            
+            # print("adj on mang", (self.tanh(deviated_winning_rate)) * self.risk_preference)
+            # print("mang", mang)
+            
+
 
         self.log.append("My cards: " + str(observation["my_cards"]))
         self.log.append("Board cards: " + str(observation["board_cards"]))
@@ -185,7 +235,7 @@ class Player(Bot):
                 expected_diff = equity - my_contribution
                 bid_diff = opp_contribution - my_contribution
                 if (
-                    bid_diff > 0.9 * expected_diff
+                    bid_diff > 0.9 * expected_diff * min(1, mang)
                     and CallAction in observation["legal_actions"]
                 ):
                     action = CallAction()
@@ -193,7 +243,7 @@ class Player(Bot):
                     bid_diff <= 0.9 * expected_diff
                     and RaiseAction in observation["legal_actions"]
                 ):
-                    raise_amount = min(int(expected_diff), observation["max_raise"])
+                    raise_amount = min(int(expected_diff*mang), observation["max_raise"])
                     raise_amount = max(raise_amount, observation["min_raise"])
                     action = RaiseAction(raise_amount)
             elif CheckAction in observation["legal_actions"]:
