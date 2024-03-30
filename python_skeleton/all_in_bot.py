@@ -4,6 +4,7 @@ Simple example pokerbot, written in Python.
 
 import itertools
 import pickle
+import random
 from typing import Optional
 
 from helper import make_key
@@ -44,7 +45,6 @@ class Player(Bot):
         self.pre_all_in_eval = pickle.load(
             open("python_skeleton/skeleton/all_in_evals.pkl", "rb")
         )
-        pass
 
     def handle_new_round(
         self, game_state: GameState, round_state: RoundState, active: int
@@ -169,32 +169,18 @@ class Player(Bot):
 
         else:
 
-            # If the villain raised, adjust the probability
-            if self.continue_cost > 1:
-                equity = (equity - 0.5) / 0.5
-                self.log.append(f"Adjusted equity: {equity}")
-
-            if equity > 0.8 and RaiseAction in observation["legal_actions"]:
-                raise_amount = min(int(self.pot_size * 0.75), observation["max_raise"])
-                raise_amount = max(raise_amount, observation["min_raise"])
-                action = RaiseAction(raise_amount)
-            elif CallAction in observation["legal_actions"] and equity >= pot_odds:
-                action = CallAction()
-            elif CheckAction in observation["legal_actions"]:
-                action = CheckAction()
-            else:
-                action = FoldAction()
-
-            self.log.append(str(action) + "\n")
-
-            return action
+            if RaiseAction in observation["legal_actions"] and random.random() < 0.99:
+                return RaiseAction(observation["max_raise"])
+            if CheckAction in observation["legal_actions"]:
+                return CheckAction()
+            return CallAction()
 
     def get_action_all_in(self, observation: dict) -> Action:
 
         cur_return = observation["my_stack"]
         all_return = 2 * STARTING_STACK * self.pre_all_in_eval[self.my_cards_key]
         if cur_return < all_return:
-            return RaiseAction(observation["max_raise"])
+            return CallAction()
         else:
             if CheckAction in observation["legal_actions"]:
                 return CheckAction()
