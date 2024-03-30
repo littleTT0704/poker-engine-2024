@@ -4,7 +4,6 @@ from datetime import datetime
 from io import StringIO
 from typing import List, Union
 
-import sqlalchemy
 from google.auth import default
 from google.auth.exceptions import DefaultCredentialsError
 from google.cloud import storage
