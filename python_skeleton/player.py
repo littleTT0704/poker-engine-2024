@@ -264,7 +264,9 @@ class Player(Bot):
         cur_return = observation["my_stack"]
         my_cards_key = make_key(observation["my_cards"], observation["board_cards"])
         group = 10 - int(self.fold_rate * 10)
-        if group == 0:
+        if observation["street"] == 2:
+            group -= 2
+        if group <= 0:
             group = 1
         all_return = 2 * STARTING_STACK * self.pre_all_in_eval[group][my_cards_key]
         self.log.append(f"All-in return: {all_return}")
