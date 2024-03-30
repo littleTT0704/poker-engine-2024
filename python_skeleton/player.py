@@ -40,7 +40,7 @@ class Player(Bot):
         Returns:
         Nothing.
         """
-        self.version = "1535"
+        self.version = "1545"
 
         self.evalof2 = pickle.load(open("python_skeleton/evalof2.pkl", "rb"))
         self.evalof3 = pickle.load(open("python_skeleton/evalof3.pkl", "rb"))
@@ -107,6 +107,7 @@ class Player(Bot):
         # opp_cards = previous_state.hands[1] # opponent's cards or [] if not revealed
         if previous_state.pips[active] > previous_state.pips[1 - active]:
             self.n_fold += 1
+        self.n_round += 1
         self.log.append("game over")
         self.log.append(f"My delta: {terminal_state.deltas[active]}")
         previous_state = terminal_state.previous_state
@@ -262,6 +263,8 @@ class Player(Bot):
         cur_return = observation["my_stack"]
         my_cards_key = make_key(observation["my_cards"], observation["board_cards"])
         group = 10 - int(self.fold_rate * 10)
+        if group == 0:
+            group = 1
         all_return = 2 * STARTING_STACK * self.pre_all_in_eval[group][my_cards_key]
         self.log.append(f"All-in return: {all_return}")
         if cur_return < all_return:
@@ -275,7 +278,7 @@ class Player(Bot):
     @property
     def fold_rate(self) -> float:
 
-        if self.n_round < 20:
+        if self.n_round < 100:
             return 0.0
         return self.n_fold / self.n_round
 
