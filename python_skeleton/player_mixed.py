@@ -1,12 +1,13 @@
 """
 Simple example pokerbot, written in Python.
 """
+
 import pickle
 import random
 from typing import Optional
 
-import numpy as np
-
+from helper import make_key
+from player import Player as CalculatedPlayer
 from skeleton.actions import Action, CallAction, CheckAction, FoldAction, RaiseAction
 from skeleton.bot import Bot
 from skeleton.runner import parse_args, run_bot
@@ -19,10 +20,6 @@ from skeleton.states import (
     RoundState,
     TerminalState,
 )
-
-
-def make_key(cards: list[str], board_cards: list[str]) -> str:
-    return "_".join(sorted(cards)) + "_" + "_".join(sorted(board_cards))
 
 
 class Player(Bot):
@@ -40,24 +37,14 @@ class Player(Bot):
         Returns:
         Nothing.
         """
-        self.version = "1545"
+        self.version = "0205"
 
-        self.evalof2 = pickle.load(open("python_skeleton/evalof2.pkl", "rb"))
-        self.evalof3 = pickle.load(open("python_skeleton/evalof3.pkl", "rb"))
-        self.evalof4 = pickle.load(open("python_skeleton/evalof4.pkl", "rb"))
-
-        self.pre_all_in_eval = {}
-        for i in range(1, 11):
-            self.pre_all_in_eval[i] = pickle.load(
-                open(f"python_skeleton/skeleton/all_in_evals_{i}.pkl", "rb")
-            )
-
-        self.pre_computed_probs = pickle.load(
-            open("python_skeleton/skeleton/pre_computed_probs.pkl", "rb")
+        self.players = {
+            "calculated-0.1": CalculatedPlayer(),
+        }
+        self.pre_all_in_eval = pickle.load(
+            open("python_skeleton/skeleton/all_in_evals.pkl", "rb")
         )
-        self.avg_eval = np.mean(np.array(list(self.evalof4.values())))
-        self.n_round = 0
-        self.n_fold = 0
 
     def handle_new_round(
         self, game_state: GameState, round_state: RoundState, active: int
@@ -80,7 +67,9 @@ class Player(Bot):
         # big_blind = bool(active) # True if you are the big blind
         self.log = [self.version]
         self.log.append("================================")
-        self.log.append(f"Round #{game_state.round_num}")
+        self.log.append("new round")
+        for player in self.players.values():
+            player.handle_new_round(game_state, round_state, active)
 
     def handle_round_over(
         self,
@@ -101,19 +90,15 @@ class Player(Bot):
             Your logs.
         """
         # my_delta = terminal_state.deltas[active] # your bankroll change from this round
-        previous_state = terminal_state.previous_state  # RoundState before payoffs
+        # previous_state = terminal_state.previous_state # RoundState before payoffs
         # street = previous_state.street # 0, 3, 4, or 5 representing when this round ended
         # my_cards = previous_state.hands[0] # your cards
         # opp_cards = previous_state.hands[1] # opponent's cards or [] if not revealed
-        if previous_state.pips[active] > previous_state.pips[1 - active]:
-            self.n_fold += 1
-        self.n_round += 1
         self.log.append("game over")
-        self.log.append(f"My delta: {terminal_state.deltas[active]}")
-        previous_state = terminal_state.previous_state
-        self.log.append(f"Opponent cards: {previous_state.hands[1]}")
-        self.log.append(f"\n")
-        # self.log.append("================================\n")
+        self.log.append("================================\n")
+
+        for player in self.players.values():
+            player.handle_round_over(game_state, terminal_state, active, is_match_over)
 
         return self.log
 
@@ -157,12 +142,6 @@ class Player(Bot):
         self.log.append("My contribution: " + str(my_contribution))
         self.log.append("My bankroll: " + str(observation["my_bankroll"]))
 
-        prob = self.pre_computed_probs[
-            "_".join(sorted(observation["my_cards"]))
-            + "_"
-            + "_".join(sorted(observation["board_cards"]))
-        ]
-
         # Handles all-in situations
         if observation["opp_stack"] == 0:
             # opponent has all-in
@@ -170,89 +149,11 @@ class Player(Bot):
 
         else:
 
-            if len(observation["board_cards"]) == 0:
-                temp_cards_list = observation["my_cards"]
-                temp_cards_list_s = sorted(
-                    temp_cards_list, key=lambda x: (int(x[0]), x[1])
-                )
-                key = temp_cards_list_s[0] + "_" + temp_cards_list_s[1]
-                equity = self.evalof2[key]
-
-            if len(observation["board_cards"]) == 1:
-                temp_cards_list = observation["my_cards"] + observation["board_cards"]
-                temp_cards_list_s = sorted(
-                    temp_cards_list, key=lambda x: (int(x[0]), x[1])
-                )
-                key = (
-                    temp_cards_list_s[0]
-                    + "_"
-                    + temp_cards_list_s[1]
-                    + "_"
-                    + temp_cards_list_s[2]
-                )
-                equity = self.evalof3[key]
-
-            if len(observation["board_cards"]) == 2:
-                temp_cards_list = observation["my_cards"] + observation["board_cards"]
-                temp_cards_list_s = sorted(
-                    temp_cards_list, key=lambda x: (int(x[0]), x[1])
-                )
-                key = (
-                    temp_cards_list_s[0]
-                    + "_"
-                    + temp_cards_list_s[1]
-                    + "_"
-                    + temp_cards_list_s[2]
-                    + "_"
-                    + temp_cards_list_s[3]
-                )
-                equity = self.evalof4[key]
-
-            self.log.append("Eval: " + str(equity))
-
-            equity = equity * np.sqrt(equity / self.avg_eval) * prob
-
-            self.log.append("After prob: " + str(equity))
-
-            if equity > my_contribution:
-                expected_diff = equity - my_contribution
-                bid_diff = opp_contribution - my_contribution
-                self.log.append(f"Expected diff: {expected_diff:.2f}")
-                self.log.append(f"  Actual diff: {bid_diff}")
-                if (
-                    bid_diff + observation["min_raise"] > expected_diff
-                    and CallAction in observation["legal_actions"]
-                ):
-                    action = CallAction()
-                if (
-                    bid_diff + observation["min_raise"] > expected_diff
-                    and CheckAction in observation["legal_actions"]
-                ):
-                    action = CheckAction()
-                if (
-                    bid_diff + observation["min_raise"] <= expected_diff
-                    and RaiseAction in observation["legal_actions"]
-                ):
-                    raise_amount = min(
-                        int(my_contribution + expected_diff / 2),
-                        observation["max_raise"],
-                    )
-                    raise_amount = max(raise_amount, observation["min_raise"])
-                    action = RaiseAction(raise_amount)
-                if (
-                    bid_diff >= 1 * expected_diff
-                    and FoldAction in observation["legal_actions"]
-                ):
-                    action = FoldAction()
-                if (
-                    bid_diff >= 1 * expected_diff
-                    and CheckAction in observation["legal_actions"]
-                ):
-                    action = CheckAction()
-            elif CheckAction in observation["legal_actions"]:
-                action = CheckAction()
-            else:
-                action = FoldAction()
+            player_names = sorted(self.players.keys())
+            player_weights = [eval(name.split("-")[-1]) for name in player_names]
+            player_chosen = random.choices(player_names, player_weights)[0]
+            self.log.append("Player Chosen: " + player_chosen)
+            action = self.players[player_chosen].get_action(observation)
 
         self.log.append(str(action) + "\n")
 
@@ -262,11 +163,7 @@ class Player(Bot):
 
         cur_return = observation["my_stack"]
         my_cards_key = make_key(observation["my_cards"], observation["board_cards"])
-        group = 10 - int(self.fold_rate * 10)
-        if group == 0:
-            group = 1
-        all_return = 2 * STARTING_STACK * self.pre_all_in_eval[group][my_cards_key]
-        self.log.append(f"All-in return: {all_return}")
+        all_return = 2 * STARTING_STACK * self.pre_all_in_eval[my_cards_key]
         if cur_return < all_return:
             return CallAction()
         else:
@@ -274,13 +171,6 @@ class Player(Bot):
                 return CheckAction()
             else:
                 return FoldAction()
-
-    @property
-    def fold_rate(self) -> float:
-
-        if self.n_round < 100:
-            return 0.0
-        return self.n_fold / self.n_round
 
 
 if __name__ == "__main__":
