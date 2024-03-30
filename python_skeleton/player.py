@@ -232,7 +232,10 @@ class Player(Bot):
                     bid_diff + observation["min_raise"] <= expected_diff
                     and RaiseAction in observation["legal_actions"]
                 ):
-                    raise_amount = min(int(equity), observation["max_raise"])
+                    raise_amount = min(
+                        int(my_contribution + expected_diff / 2),
+                        observation["max_raise"],
+                    )
                     raise_amount = max(raise_amount, observation["min_raise"])
                     action = RaiseAction(raise_amount)
                 if (
