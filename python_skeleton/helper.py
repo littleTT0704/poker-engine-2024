@@ -70,9 +70,6 @@ def compute_all_in_with_known_info(prob_file_in: str, eval_file_out: str):
     res = P.map_async(compute_all_in_payoff_wrapper, todos).get()
     P.close()
     P.join()
-    import pdb
-
-    pdb.set_trace()
     res = {
         make_key(my_cards, board_cards): share
         for ((my_cards, board_cards, _), share) in zip(todos, res)
