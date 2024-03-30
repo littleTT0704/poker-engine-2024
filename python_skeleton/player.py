@@ -6,6 +6,7 @@ import pickle
 import random
 from typing import Optional
 
+from helper import make_key
 from skeleton.actions import Action, CallAction, CheckAction, FoldAction, RaiseAction
 from skeleton.bot import Bot
 from skeleton.runner import parse_args, run_bot
@@ -35,7 +36,8 @@ class Player(Bot):
         Returns:
         Nothing.
         """
-        self.log = []
+        self.version = "0133"
+
         self.evalof2 = pickle.load(open("python_skeleton/evalof2.pkl", "rb"))
         self.evalof3 = pickle.load(open("python_skeleton/evalof3.pkl", "rb"))
         self.evalof4 = pickle.load(open("python_skeleton/evalof4.pkl", "rb"))
@@ -62,7 +64,7 @@ class Player(Bot):
         # round_num = game_state.round_num # the round number from 1 to NUM_ROUNDS
         # my_cards = round_state.hands[0] # your cards
         # big_blind = bool(active) # True if you are the big blind
-        self.log = []
+        self.log = [self.version]
         self.log.append("================================")
         self.log.append("new round")
 
@@ -206,7 +208,8 @@ class Player(Bot):
     def get_action_all_in(self, observation: dict) -> Action:
 
         cur_return = observation["my_stack"]
-        all_return = 2 * STARTING_STACK * self.pre_all_in_eval[self.my_cards_key]
+        my_cards_key = make_key(observation["my_cards"], observation["board_cards"])
+        all_return = 2 * STARTING_STACK * self.pre_all_in_eval[my_cards_key]
         if cur_return < all_return:
             return CallAction()
         else:
