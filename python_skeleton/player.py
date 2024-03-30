@@ -1,7 +1,7 @@
 """
 Simple example pokerbot, written in Python.
 """
-
+import pickle
 import random
 from typing import Optional
 
@@ -27,6 +27,7 @@ class Player(Bot):
         Nothing.
         """
         self.log = []
+        self.pre_computed_probs = pickle.load(open("python_skeleton/skeleton/pre_computed_probs.pkl", "rb")) 
         pass
 
     def handle_new_round(self, game_state: GameState, round_state: RoundState, active: int) -> None:
@@ -101,8 +102,31 @@ class Player(Bot):
         opp_contribution = STARTING_STACK - observation["opp_stack"] # the number of chips your opponent has contributed to the pot
         continue_cost = observation["opp_pip"] - observation["my_pip"] # the number of chips needed to stay in the pot
 
+        bet = 2
         equity = self.pre_computed_probs['_'.join(sorted(observation["my_cards"])) + '_' + '_'.join(sorted(observation["board_cards"]))]
+        # print("bet106", equity)
+        rule1 = equity*(my_contribution+opp_contribution)-my_contribution
+        bet += rule1
+        # print("bet108", bet)
         
+        rule2 = 0.05*(opp_contribution**3)/((my_contribution+opp_contribution)**2) # be tighter by 0.01
+        bet -= rule2
+        # print("bet112", bet)
+
+        bluff_prob = random.random()/3
+        if random.random() <= bluff_prob: bet *= 50*max((equity-0.5)**2, 0)
+        # print("bet116", bet)
+
+        # print("bet118", bet)
+        self.log.append(f"Premeta bet: {bet}")
+
+        ev = equity*opp_contribution-(1-equity)*bet
+        var = equity*(opp_contribution-ev)**2+(1-equity)*(-bet-ev)**2
+        meta = 0.1*var**0.5
+        # bet -= 0.1*meta
+        # print("bet126", bet)
+
+        self.log.append(f"Bet steps: {rule1, rule2, meta}")
 
         self.log.append("My cards: " + str(observation["my_cards"]))
         self.log.append("Board cards: " + str(observation["board_cards"]))
@@ -110,13 +134,20 @@ class Player(Bot):
         self.log.append("My contribution: " + str(my_contribution))
         self.log.append("My bankroll: " + str(observation["my_bankroll"]))
 
-        if RaiseAction in observation["legal_actions"] and random.random() < 0.99:
-            min_cost = observation["min_raise"] - observation["my_pip"] # the cost of a minimum bet/raise
-            max_cost = observation["max_raise"] - observation["my_pip"] # the cost of a maximum bet/raise
-            return RaiseAction(observation["max_raise"])
         if CheckAction in observation["legal_actions"]:
+            # print("bet145", bet)
             return CheckAction()
-        return CallAction()
+        if bet >= continue_cost:
+            # print("bet137", bet)
+            if bet >= observation["min_raise"] and RaiseAction in observation["legal_actions"]:
+                # print("bet139", bet)
+                return RaiseAction(round(min(bet, observation["max_raise"])))
+            if bet <= observation["min_raise"] and CallAction in observation["legal_actions"]:
+                # print("bet142", bet)
+                return CallAction()
+        # print("bet147", bet)
+        return FoldAction()
+
 
 if __name__ == '__main__':
     run_bot(Player(), parse_args())
