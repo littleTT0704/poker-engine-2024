@@ -26,6 +26,7 @@ def compute_all_in_payoff(
     my_cards: list[str],
     board_cards: list[str],
     probs: dict[str, float],
+    cutoff: float,
 ) -> float:
 
     leftover_cards = get_leftover_cards(list(my_cards) + list(board_cards))
@@ -33,14 +34,17 @@ def compute_all_in_payoff(
     opp_equity_keys = [
         make_key(opp_cards, board_cards) for opp_cards in possible_opp_card
     ]
-    
+    opp_equity = sorted([probs[opp_equity_key] for opp_equity_key in opp_equity_keys])
+    opp_equity = opp_equity[-int(len(opp_equity) * cutoff) :]
+
     my_equity_key = make_key(my_cards, board_cards)
     my_equity = probs[my_equity_key]
     shares = [
         my_equity / (probs[opp_equity_key] + my_equity)
         if (probs[opp_equity_key] + my_equity) > 1e-8
         else 0.5
-        for opp_equity_key in opp_equity_keys if probs[opp_equity_key] > 0.2
+        for opp_equity_key in opp_equity_keys
+        # if probs[opp_equity_key] > cutoff
     ]
     return sum(shares) / len(shares)
 
@@ -67,17 +71,20 @@ def compute_all_in_with_known_info(prob_file_in: str, eval_file_out: str):
     print(len(todos))
     todos = list(todos.values())
 
-    P = Pool(20)
-    res = P.map_async(compute_all_in_payoff_wrapper, todos).get()
-    P.close()
-    P.join()
-    res = {
-        make_key(my_cards, board_cards): share
-        for ((my_cards, board_cards, _), share) in zip(todos, res)
-    }
+    for cutoff in range(1, 11):
+        P = Pool(20)
+        res = P.map_async(
+            compute_all_in_payoff_wrapper, [x + (cutoff / 10,) for x in todos]
+        ).get()
+        P.close()
+        P.join()
+        res = {
+            make_key(my_cards, board_cards): share
+            for ((my_cards, board_cards, _), share) in zip(todos, res)
+        }
 
-    with open(eval_file_out, "wb") as fout:
-        pickle.dump(res, fout)
+        with open(eval_file_out.replace(".pkl", f"_{cutoff}.pkl"), "wb") as fout:
+            pickle.dump(res, fout)
 
 
 if __name__ == "__main__":
