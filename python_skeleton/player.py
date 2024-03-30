@@ -1,12 +1,11 @@
 """
 Simple example pokerbot, written in Python.
 """
-
+import numpy as np
 import pickle
 import random
 from typing import Optional
 
-from helper import make_key
 from skeleton.actions import Action, CallAction, CheckAction, FoldAction, RaiseAction
 from skeleton.bot import Bot
 from skeleton.runner import parse_args, run_bot
@@ -19,6 +18,10 @@ from skeleton.states import (
     RoundState,
     TerminalState,
 )
+
+
+def make_key(cards: list[str], board_cards: list[str]) -> str:
+    return "_".join(sorted(cards)) + "_" + "_".join(sorted(board_cards))
 
 
 class Player(Bot):
@@ -36,7 +39,7 @@ class Player(Bot):
         Returns:
         Nothing.
         """
-        self.version = "0133"
+        self.version = "1431"
 
         self.evalof2 = pickle.load(open("python_skeleton/evalof2.pkl", "rb"))
         self.evalof3 = pickle.load(open("python_skeleton/evalof3.pkl", "rb"))
@@ -44,6 +47,9 @@ class Player(Bot):
         self.pre_all_in_eval = pickle.load(
             open("python_skeleton/skeleton/all_in_evals.pkl", "rb")
         )
+        self.pre_computed_probs = pickle.load(open("python_skeleton/skeleton/pre_computed_probs.pkl", "rb")) 
+        self.avg_eval = np.mean(np.array(list(self.evalof4.values())))
+        pass
 
     def handle_new_round(
         self, game_state: GameState, round_state: RoundState, active: int
@@ -66,7 +72,7 @@ class Player(Bot):
         # big_blind = bool(active) # True if you are the big blind
         self.log = [self.version]
         self.log.append("================================")
-        self.log.append("new round")
+        self.log.append(f"Round #{game_state.round_num}")
 
     def handle_round_over(
         self,
@@ -92,7 +98,11 @@ class Player(Bot):
         # my_cards = previous_state.hands[0] # your cards
         # opp_cards = previous_state.hands[1] # opponent's cards or [] if not revealed
         self.log.append("game over")
-        self.log.append("================================\n")
+        self.log.append(f"My delta: {terminal_state.deltas[active]}")
+        previous_state = terminal_state.previous_state
+        self.log.append(f"Opponent cards: {previous_state.hands[1]}")
+        self.log.append(f"\n")
+        # self.log.append("================================\n")
 
         return self.log
 
@@ -135,6 +145,8 @@ class Player(Bot):
         self.log.append("My stack: " + str(observation["my_stack"]))
         self.log.append("My contribution: " + str(my_contribution))
         self.log.append("My bankroll: " + str(observation["my_bankroll"]))
+
+        prob = self.pre_computed_probs['_'.join(sorted(observation["my_cards"])) + '_' + '_'.join(sorted(observation["board_cards"]))]
 
         # Handles all-in situations
         if observation["opp_stack"] == 0:
@@ -181,21 +193,44 @@ class Player(Bot):
                 )
                 equity = self.evalof4[key]
 
+            self.log.append("Eval: " + str(equity))
+
+            equity = equity*np.sqrt(equity/self.avg_eval)*prob
+
+            self.log.append("After prob: " + str(equity))
+
             if equity > my_contribution:
                 expected_diff = equity - my_contribution
                 bid_diff = opp_contribution - my_contribution
+                self.log.append(f"Expected diff: {expected_diff:.2f}")
+                self.log.append(f"  Actual diff: {bid_diff}")
                 if (
-                    bid_diff > 0.9 * expected_diff
+                    bid_diff+observation["min_raise"] > expected_diff
                     and CallAction in observation["legal_actions"]
                 ):
                     action = CallAction()
                 if (
-                    bid_diff <= 0.9 * expected_diff
+                    bid_diff+observation["min_raise"] > expected_diff
+                    and CheckAction in observation["legal_actions"]
+                ):
+                    action = CheckAction()
+                if (
+                    bid_diff+observation["min_raise"] <= expected_diff
                     and RaiseAction in observation["legal_actions"]
                 ):
-                    raise_amount = min(int(expected_diff), observation["max_raise"])
+                    raise_amount = min(int(equity), observation["max_raise"])
                     raise_amount = max(raise_amount, observation["min_raise"])
                     action = RaiseAction(raise_amount)
+                if (
+                    bid_diff >= 1 * expected_diff
+                    and FoldAction in observation["legal_actions"]
+                ):
+                    action = FoldAction()
+                if (
+                    bid_diff >= 1 * expected_diff
+                    and CheckAction in observation["legal_actions"]
+                ):
+                    action = CheckAction()
             elif CheckAction in observation["legal_actions"]:
                 action = CheckAction()
             else:
@@ -210,6 +245,7 @@ class Player(Bot):
         cur_return = observation["my_stack"]
         my_cards_key = make_key(observation["my_cards"], observation["board_cards"])
         all_return = 2 * STARTING_STACK * self.pre_all_in_eval[my_cards_key]
+        self.log.append(f"All-in return: {all_return}")
         if cur_return < all_return:
             return CallAction()
         else:
